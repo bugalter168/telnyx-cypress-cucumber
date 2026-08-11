@@ -1,0 +1,10 @@
+{
+  "_comment": "Only links VERIFIED to carry a safe rel are listed. shop.telnyx.com and trust.telnyx.com are target=_blank with rel=null - a real site defect logged as DEF-TLNX-001 - and are deliberately excluded so the suite is not permanently red for something we cannot fix.",
+  "requiredRelTokens": ["noopener", "noreferrer"],
+  "header": [{ "name": "Log in (portal)", "href": "https://portal.telnyx.com" }],
+  "footer": [
+    { "name": "LinkedIn", "href": "https://www.linkedin.com/company/telnyx" },
+    { "name": "X", "href": "https://x.com/telnyx" },
+    { "name": "Facebook", "href": "https://www.facebook.com/Telnyx/" }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+
+    /* Modern resolution. `baseUrl` is deliberately NOT set (it is deprecated), and no
+       `paths` mapping is declared: `bundler` resolution walks node_modules natively from
+       this directory, which is the project root. A catch-all {"*": ["./node_modules/*"]}
+       was tried and removed — it changed nothing (tsc exits 0 either way) and a catch-all
+       can mask a genuine resolution error later. Nothing in this project ever resolves
+       through ../node_modules. */
+    "moduleResolution": "bundler",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    "types": ["cypress", "node"]
+  },
+  "include": [
+    "cypress/**/*.ts",
+    "cypress/**/*.d.ts",
+    "config/**/*.ts",
+    "cypress.config.ts",
+    "cypress.ci.config.ts"
+  ],
+  "exclude": ["node_modules", "allure-report", "allure-results"]
+}

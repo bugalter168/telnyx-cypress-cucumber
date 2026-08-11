@@ -1,0 +1,17 @@
+{
+  "baseUrl": "https://telnyx.com",
+  "titleToken": "Telnyx",
+  "canonicalUrl": "https://telnyx.com",
+  "minMetaDescriptionLength": 50,
+  "openGraph": {
+    "site_name": "Telnyx",
+    "type": "website",
+    "url": "https://telnyx.com"
+  },
+  "notFound": {
+    "path": "/this-page-does-not-exist-tlnx",
+    "status": 404,
+    "heading": "Oops, this page doesn’t exist",
+    "errorCode": "Error 404"
+  }
+}

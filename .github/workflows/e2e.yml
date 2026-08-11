@@ -1,0 +1,201 @@
+name: E2E
+
+# Testing only after merge is too late — the suite runs on every push to main AND on
+# every pull request targeting it, so a regression is caught before it lands.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; the deploy job widens it for itself only.
+permissions:
+  contents: read
+
+# A newer push supersedes an in-flight run for the same ref. This matters more than usual
+# here: the suite drives somebody else's production site, so overlapping runs would mean
+# unnecessary duplicate traffic.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned to the same version used locally. Node 20 is EOL and is deliberately not used.
+  NODE_VERSION: '24.18.0'
+
+jobs:
+  test:
+    name: Cypress (CI profile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # npm ci, not npm install: it installs strictly from the committed lockfile and
+      # fails if package.json and the lockfile have drifted.
+      - name: Install dependencies
+        run: npm ci
+
+      # Guards the exact drift the lockfile is supposed to prevent. `npm ci` can resolve
+      # `overrides` differently from a local `npm install` if the lockfile is stale, and
+      # the two overrides here are what keep `npm audit` clean.
+      - name: Verify overrides resolved as expected
+        run: |
+          echo "serialize-javascript: $(node -p "require('serialize-javascript/package.json').version")"
+          echo "diff:                 $(node -p "require('diff/package.json').version")"
+          node -e "
+            const semverMajor = (p) => Number(require(p + '/package.json').version.split('.')[0]);
+            const sj = semverMajor('serialize-javascript');
+            const df = semverMajor('diff');
+            if (sj < 7) { throw new Error('serialize-javascript override did not apply: got major ' + sj); }
+            if (df < 8) { throw new Error('diff override did not apply: got major ' + df); }
+            console.log('Both overrides resolved correctly under npm ci.');
+          "
+
+      - name: Audit (fail on high or critical)
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      # Uses the CI profile explicitly: headless Electron, retries, video, screenshots
+      # on failure. See the config comparison table in the README.
+      - name: Run Cypress suite
+        run: npm run test:ci
+
+      # ── Artefacts ──────────────────────────────────────────────────────────────
+      # if: always() so a red run still uploads the evidence needed to debug it.
+      # Failures are never masked with continue-on-error: if the pipeline is red, the
+      # cause gets fixed.
+
+      - name: Resolve artefact paths
+        if: always()
+        id: paths
+        run: |
+          echo "allure_results=$(node -p "require('./config/paths.json').allureResultsDir")" >> "$GITHUB_OUTPUT"
+          echo "screenshots=$(node -p "require('./config/paths.json').screenshotsDir")" >> "$GITHUB_OUTPUT"
+          echo "videos=$(node -p "require('./config/paths.json').videosDir")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload allure-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: ${{ steps.paths.outputs.allure_results }}
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: ${{ steps.paths.outputs.screenshots }}
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: ${{ steps.paths.outputs.videos }}
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ── Allure report -> GitHub Pages ────────────────────────────────────────────
+  # Runs only on main. `if: always()` so a FAILED suite still publishes its report —
+  # a report you can only see when everything passed is worth very little.
+  publish-report:
+    name: Publish Allure report
+    needs: test
+    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write # to push the gh-pages branch
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Allure's report generator is a Java application.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve artefact paths
+        id: paths
+        run: |
+          echo "allure_results=$(node -p "require('./config/paths.json').allureResultsDir")" >> "$GITHUB_OUTPUT"
+          echo "allure_report=$(node -p "require('./config/paths.json').allureReportDir")" >> "$GITHUB_OUTPUT"
+
+      - name: Download allure-results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results
+          path: ${{ steps.paths.outputs.allure_results }}
+
+      # THIS is what makes the trend graph meaningful. Allure derives history from a
+      # `history/` folder inside the RESULTS directory before generating. Without this
+      # step every run publishes a single-point trend and the graph is decoration.
+      # No `continue-on-error` here. Nothing is masked: the absence of a gh-pages branch is
+      # an EXPECTED state on the first ever run, and the script handles it explicitly by
+      # exiting 0 with a message. A genuine failure in this step still fails the job.
+      - name: Restore previous report history from gh-pages
+        run: |
+          if ! git fetch origin gh-pages --depth=1 2>/dev/null; then
+            echo "No gh-pages branch yet — this run starts the trend."
+            exit 0
+          fi
+          git worktree add /tmp/gh-pages origin/gh-pages
+          if [ -d /tmp/gh-pages/history ]; then
+            mkdir -p "${{ steps.paths.outputs.allure_results }}/history"
+            cp -r /tmp/gh-pages/history/. "${{ steps.paths.outputs.allure_results }}/history/"
+            echo "Restored $(ls -1 /tmp/gh-pages/history | wc -l) history file(s)."
+          else
+            echo "No previous history found — this run starts the trend."
+          fi
+
+      - name: Generate Allure report
+        run: npm run report:generate
+
+      # Published to the gh-pages BRANCH, never to a docs/ folder on main. Generated
+      # artefacts are not committed to the source branch.
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ steps.paths.outputs.allure_report }}
+          publish_branch: gh-pages
+          keep_files: false
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: 'ci: publish Allure report for ${{ github.sha }}'

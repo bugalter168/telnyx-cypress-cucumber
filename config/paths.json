@@ -1,0 +1,7 @@
+{
+  "allureResultsDir": "allure-results",
+  "allureReportDir": "allure-report",
+  "allureHistoryDir": "allure-report/history",
+  "screenshotsDir": "cypress/screenshots",
+  "videosDir": "cypress/videos"
+}

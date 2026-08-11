@@ -1,0 +1,14 @@
+node_modules
+allure-results
+allure-report
+cypress/videos
+cypress/screenshots
+test-plan/*.xlsx
+test-plan/*.docx
+
+# Editor/tooling config, not project source.
+.claude
+
+# Gherkin has its own layout rules (Examples table alignment) and Prettier has no
+# Gherkin parser. Formatting these as anything else corrupts them.
+*.feature

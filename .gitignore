@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Test artefacts — never committed. The Allure report is published to the
+# gh-pages branch by CI, not to a folder on main.
+allure-results/
+allure-report/
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/
+
+# Secrets. This suite needs none (see README), but if any are ever added they go here.
+cypress.env.json
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Editor / OS / agent tooling — machine-local, must not ship in a clone
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.claude/
+.DS_Store
+Thumbs.db
